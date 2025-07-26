@@ -12,6 +12,9 @@ var (
 	url         string
 	totalReqs   int
 	concurrency int
+	method      string
+	body        string
+	contentType string
 )
 
 var rootCmd = &cobra.Command{
@@ -24,9 +27,14 @@ Usage:
 
 Examples:
   gobench -u https://example.com -n 100 -c 5
+  gobench -u https://api.example.com/users -m POST -n 50 -c 10
+  gobench -u https://api.example.com/users -m POST -d '{"name":"John","email":"john@example.com"}' -H "application/json" -n 50 -c 10
 
 Flags:
   -u, --url           URL to benchmark
+  -m, --method        HTTP method to use (GET, POST, PUT, DELETE, etc.)
+  -d, --data          Request body data (for POST/PUT requests)
+  -H, --header        Content-Type header (default: application/json for POST/PUT with data)
   -n, --requests      Number of requests to send
   -c, --concurrency   Number of concurrent workers
 `,
@@ -41,12 +49,27 @@ Flags:
 			os.Exit(1)
 		}
 
-		bench.RunBenchMark(url, totalReqs, concurrency)
+		// Validate HTTP method
+		if method == "" {
+			method = "GET" // Default to GET if not specified
+		}
+
+		// Set default content type for POST/PUT with data
+		if body != "" && contentType == "" {
+			if method == "POST" || method == "PUT" {
+				contentType = "application/json"
+			}
+		}
+
+		bench.RunBenchMark(url, method, body, contentType, totalReqs, concurrency)
 	},
 }
 
 func init() {
 	rootCmd.Flags().StringVarP(&url, "url", "u", "", "URL to benchmark")
+	rootCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method to use (GET, POST, PUT, DELETE, etc.)")
+	rootCmd.Flags().StringVarP(&body, "data", "d", "", "Request body data (for POST/PUT requests)")
+	rootCmd.Flags().StringVarP(&contentType, "header", "H", "", "Content-Type header")
 	rootCmd.Flags().IntVarP(&totalReqs, "requests", "n", 1, "Total number of requests")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of concurrent workers")
 }

@@ -2,7 +2,9 @@ package bench
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,30 +12,77 @@ import (
 )
 
 type Result struct {
-	Duration time.Duration
-	Success  bool
+	Duration   time.Duration
+	Success    bool
+	StatusCode int
+	Error      string
 }
 
-func worker(id int, url string, jobs <-chan int, results chan<- Result, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
+func worker(id int, url, method, body, contentType string, jobs <-chan int, results chan<- Result, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	defer wg.Done()
 	for range jobs {
 		start := time.Now()
-		resp, err := http.Get(url)
-		duration := time.Since(start)
 
-		if err != nil || resp.StatusCode >= 400 {
-			results <- Result{Duration: duration, Success: false}
+		// Create request body if provided
+		var reqBody io.Reader
+		if body != "" {
+			reqBody = strings.NewReader(body)
+		}
+
+		// Create request with specified method and body
+		req, err := http.NewRequest(method, url, reqBody)
+		if err != nil {
+			results <- Result{
+				Duration: time.Since(start),
+				Success:  false,
+				Error:    fmt.Sprintf("Failed to create request: %v", err),
+			}
 			continue
 		}
 
-		results <- Result{Duration: duration, Success: true}
+		// Set content type header if provided
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+
+		// Send request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		duration := time.Since(start)
+
+		if err != nil {
+			results <- Result{
+				Duration: duration,
+				Success:  false,
+				Error:    fmt.Sprintf("Request failed: %v", err),
+			}
+			continue
+		}
+
+		// Check if status code indicates failure
+		if resp.StatusCode >= 400 {
+			results <- Result{
+				Duration:   duration,
+				Success:    false,
+				StatusCode: resp.StatusCode,
+				Error:      fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
+			}
+			resp.Body.Close()
+			continue
+		}
+
+		results <- Result{
+			Duration:   duration,
+			Success:    true,
+			StatusCode: resp.StatusCode,
+		}
 		resp.Body.Close()
 
 		bar.Add(1)
 	}
 }
 
-func RunBenchMark(url string, totalReqs, concurrency int) {
+func RunBenchMark(url, method, body, contentType string, totalReqs, concurrency int) {
 	jobs := make(chan int, totalReqs)
 	results := make(chan Result, totalReqs)
 	var wg sync.WaitGroup
@@ -53,7 +102,7 @@ func RunBenchMark(url string, totalReqs, concurrency int) {
 
 	for w := 1; w <= concurrency; w++ {
 		wg.Add(1)
-		go worker(w, url, jobs, results, &wg, bar)
+		go worker(w, url, method, body, contentType, jobs, results, &wg, bar)
 	}
 
 	for j := 0; j < totalReqs; j++ {
@@ -67,12 +116,22 @@ func RunBenchMark(url string, totalReqs, concurrency int) {
 	var successCount, failCount int
 	var totalTime time.Duration
 	var minTime, maxTime time.Duration
+	var statusCodes = make(map[int]int)
+	var errors = make(map[string]int)
 
 	for res := range results {
 		if res.Success {
 			successCount++
 		} else {
 			failCount++
+			// Count status codes for failed requests
+			if res.StatusCode > 0 {
+				statusCodes[res.StatusCode]++
+			}
+			// Count error types
+			if res.Error != "" {
+				errors[res.Error]++
+			}
 		}
 
 		totalTime += res.Duration
@@ -89,9 +148,41 @@ func RunBenchMark(url string, totalReqs, concurrency int) {
 
 	fmt.Println("")
 	fmt.Println("====== GoBench Result ======")
+	fmt.Println("URL :", url)
+	fmt.Println("Method :", method)
+	if body != "" {
+		fmt.Println("Body :", body)
+	}
+	if contentType != "" {
+		fmt.Println("Content-Type :", contentType)
+	}
 	fmt.Println("Total Requests :", totalReqs)
 	fmt.Println("Success :", successCount)
 	fmt.Println("Failed :", failCount)
+
+	// Show failure details if there are any
+	if failCount > 0 {
+		fmt.Println("")
+		fmt.Println("--- Failure Details ---")
+
+		// Show status code breakdown
+		if len(statusCodes) > 0 {
+			fmt.Println("Status Codes:")
+			for status, count := range statusCodes {
+				fmt.Printf("  %d: %d requests\n", status, count)
+			}
+		}
+
+		// Show error breakdown
+		if len(errors) > 0 {
+			fmt.Println("Errors:")
+			for err, count := range errors {
+				fmt.Printf("  %s: %d requests\n", err, count)
+			}
+		}
+		fmt.Println("")
+	}
+
 	fmt.Println("Min Time :", minTime)
 	fmt.Println("Max Time :", maxTime)
 	fmt.Println("Avg Time :", avgTime)
