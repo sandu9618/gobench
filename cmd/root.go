@@ -22,22 +22,26 @@ var rootCmd = &cobra.Command{
 	Short: "GoBench is a simple HTTP benchmark tool",
 	Long: `GoBench is a tiny HTTP benchmarking tool written in Go.
 
-Usage:
-  gobench [flags]
+	Usage:
+		gobench [flags]
 
-Examples:
-  gobench -u https://example.com -n 100 -c 5
-  gobench -u https://api.example.com/users -m POST -n 50 -c 10
-  gobench -u https://api.example.com/users -m POST -d '{"name":"John","email":"john@example.com"}' -H "application/json" -n 50 -c 10
+	Examples:
+		gobench -u https://example.com -n 100 -c 5
+		gobench -u https://api.example.com/users -m POST -n 50 -c 10
+		gobench -u https://api.example.com/users -m POST -d '{"name":"John","email":"john@example.com"}' -H "application/json" -n 50 -c 10
 
-Flags:
-  -u, --url           URL to benchmark
-  -m, --method        HTTP method to use (GET, POST, PUT, DELETE, etc.)
-  -d, --data          Request body data (for POST/PUT requests)
-  -H, --header        Content-Type header (default: application/json for POST/PUT with data)
-  -n, --requests      Number of requests to send
-  -c, --concurrency   Number of concurrent workers
-`,
+	Flags:
+		-u, --url           URL to benchmark
+		-m, --method        HTTP method to use (GET, POST, PUT, DELETE, etc.)
+		-d, --data          Request body data (for POST/PUT requests)
+		-H, --header        Content-Type header (default: application/json for POST/PUT with data)
+		-n, --requests      Number of requests to send
+		-c, --concurrency   Number of concurrent workers
+	
+	Notes: 
+		Method will be default to GET if not specified
+		Content-Type will be default to application/json if not specified and method is POST or PUT
+	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if url == "" {
 			cmd.Help()
