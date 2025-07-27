@@ -16,6 +16,10 @@ var (
 	body         string
 	contentType  string
 	showResponse bool
+	headers      []string
+	username     string
+	password     string
+	bearerToken  string
 )
 
 var rootCmd = &cobra.Command{
@@ -29,15 +33,22 @@ Usage:
 Examples:
   gobench -u https://example.com -n 100 -c 5
   gobench -u https://api.example.com/users -m POST -n 50 -c 10
-  gobench -u https://api.example.com/users -m POST -d '{"name":"John","email":"john@example.com"}' -H "application/json" -n 50 -c 10
+  gobench -u https://api.example.com/users -m POST -d '{"name":"John","email":"john@example.com"}' -t "application/json" -n 50 -c 10
   gobench -u https://api.example.com/users -m GET -n 1 -c 1 --show-response
+  gobench -u https://api.example.com/protected -H "Authorization: Bearer your-token-here" -n 100 -c 5
+  gobench -u https://api.example.com/protected --username user --password pass -n 100 -c 5
+  gobench -u https://api.example.com/protected --bearer your-jwt-token -n 100 -c 5
 
 Flags:
   -u, --url           URL to benchmark
   -m, --method        HTTP method to use (GET, POST, PUT, DELETE, etc.)
   -d, --data          Request body data (for POST/PUT requests)
-  -H, --header        Content-Type header (default: application/json for POST/PUT with data)
+  -t, --content-type  Content-Type header (default: application/json for POST/PUT with data)
   --show-response     Show response body in output
+  -H, --headers       Custom headers (can be used multiple times, format: "Key: Value")
+  --username          Username for basic authentication
+  --password          Password for basic authentication
+  --bearer            Bearer token for authentication
   -n, --requests      Number of requests to send
   -c, --concurrency   Number of concurrent workers
 `,
@@ -64,7 +75,7 @@ Flags:
 			}
 		}
 
-		bench.RunBenchMark(url, method, body, contentType, showResponse, totalReqs, concurrency)
+		bench.RunBenchMark(url, method, body, contentType, showResponse, headers, username, password, bearerToken, totalReqs, concurrency)
 	},
 }
 
@@ -72,8 +83,12 @@ func init() {
 	rootCmd.Flags().StringVarP(&url, "url", "u", "", "URL to benchmark")
 	rootCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method to use (GET, POST, PUT, DELETE, etc.)")
 	rootCmd.Flags().StringVarP(&body, "data", "d", "", "Request body data (for POST/PUT requests)")
-	rootCmd.Flags().StringVarP(&contentType, "header", "H", "", "Content-Type header")
+	rootCmd.Flags().StringVarP(&contentType, "content-type", "t", "", "Content-Type header")
 	rootCmd.Flags().BoolVar(&showResponse, "show-response", false, "Show response body in output")
+	rootCmd.Flags().StringSliceVarP(&headers, "headers", "H", []string{}, "Custom headers (can be used multiple times, format: 'Key: Value')")
+	rootCmd.Flags().StringVar(&username, "username", "", "Username for basic authentication")
+	rootCmd.Flags().StringVar(&password, "password", "", "Password for basic authentication")
+	rootCmd.Flags().StringVar(&bearerToken, "bearer", "", "Bearer token for authentication")
 	rootCmd.Flags().IntVarP(&totalReqs, "requests", "n", 1, "Total number of requests")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of concurrent workers")
 }

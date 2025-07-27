@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,7 +20,7 @@ type Result struct {
 	ResponseBody string
 }
 
-func worker(id int, url, method, body, contentType string, jobs <-chan int, results chan<- Result, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
+func worker(id int, url, method, body, contentType string, headers []string, username, password, bearerToken string, jobs <-chan int, results chan<- Result, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	defer wg.Done()
 	for range jobs {
 		start := time.Now()
@@ -44,6 +45,28 @@ func worker(id int, url, method, body, contentType string, jobs <-chan int, resu
 		// Set content type header if provided
 		if contentType != "" {
 			req.Header.Set("Content-Type", contentType)
+		}
+
+		// Set custom headers
+		for _, header := range headers {
+			parts := strings.SplitN(header, ":", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+				req.Header.Set(key, value)
+			}
+		}
+
+		// Set basic authentication if provided
+		if username != "" && password != "" {
+			auth := username + ":" + password
+			encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+			req.Header.Set("Authorization", "Basic "+encodedAuth)
+		}
+
+		// Set bearer token if provided
+		if bearerToken != "" {
+			req.Header.Set("Authorization", "Bearer "+bearerToken)
 		}
 
 		// Send request
@@ -97,7 +120,7 @@ func worker(id int, url, method, body, contentType string, jobs <-chan int, resu
 	}
 }
 
-func RunBenchMark(url, method, body, contentType string, showResponse bool, totalReqs, concurrency int) {
+func RunBenchMark(url, method, body, contentType string, showResponse bool, headers []string, username, password, bearerToken string, totalReqs, concurrency int) {
 	jobs := make(chan int, totalReqs)
 	results := make(chan Result, totalReqs)
 	var wg sync.WaitGroup
@@ -117,7 +140,7 @@ func RunBenchMark(url, method, body, contentType string, showResponse bool, tota
 
 	for w := 1; w <= concurrency; w++ {
 		wg.Add(1)
-		go worker(w, url, method, body, contentType, jobs, results, &wg, bar)
+		go worker(w, url, method, body, contentType, headers, username, password, bearerToken, jobs, results, &wg, bar)
 	}
 
 	for j := 0; j < totalReqs; j++ {
@@ -175,6 +198,15 @@ func RunBenchMark(url, method, body, contentType string, showResponse bool, tota
 	}
 	if contentType != "" {
 		fmt.Println("Content-Type :", contentType)
+	}
+	if len(headers) > 0 {
+		fmt.Println("Custom Headers :", headers)
+	}
+	if username != "" {
+		fmt.Println("Username :", username)
+	}
+	if bearerToken != "" {
+		fmt.Println("Bearer Token :", "***"+bearerToken[len(bearerToken)-4:]+"***")
 	}
 	fmt.Println("Total Requests :", totalReqs)
 	fmt.Println("Success :", successCount)
