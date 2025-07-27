@@ -12,10 +12,11 @@ import (
 )
 
 type Result struct {
-	Duration   time.Duration
-	Success    bool
-	StatusCode int
-	Error      string
+	Duration     time.Duration
+	Success      bool
+	StatusCode   int
+	Error        string
+	ResponseBody string
 }
 
 func worker(id int, url, method, body, contentType string, jobs <-chan int, results chan<- Result, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
@@ -59,30 +60,44 @@ func worker(id int, url, method, body, contentType string, jobs <-chan int, resu
 			continue
 		}
 
-		// Check if status code indicates failure
-		if resp.StatusCode >= 400 {
+		// Read response body
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
 			results <- Result{
 				Duration:   duration,
 				Success:    false,
 				StatusCode: resp.StatusCode,
-				Error:      fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
+				Error:      fmt.Sprintf("Failed to read response body: %v", err),
 			}
-			resp.Body.Close()
+			continue
+		}
+
+		// Check if status code indicates failure
+		if resp.StatusCode >= 400 {
+			results <- Result{
+				Duration:     duration,
+				Success:      false,
+				StatusCode:   resp.StatusCode,
+				Error:        fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
+				ResponseBody: string(respBody),
+			}
 			continue
 		}
 
 		results <- Result{
-			Duration:   duration,
-			Success:    true,
-			StatusCode: resp.StatusCode,
+			Duration:     duration,
+			Success:      true,
+			StatusCode:   resp.StatusCode,
+			ResponseBody: string(respBody),
 		}
-		resp.Body.Close()
 
 		bar.Add(1)
 	}
 }
 
-func RunBenchMark(url, method, body, contentType string, totalReqs, concurrency int) {
+func RunBenchMark(url, method, body, contentType string, showResponse bool, totalReqs, concurrency int) {
 	jobs := make(chan int, totalReqs)
 	results := make(chan Result, totalReqs)
 	var wg sync.WaitGroup
@@ -118,10 +133,15 @@ func RunBenchMark(url, method, body, contentType string, totalReqs, concurrency 
 	var minTime, maxTime time.Duration
 	var statusCodes = make(map[int]int)
 	var errors = make(map[string]int)
+	var sampleResponse string
 
 	for res := range results {
 		if res.Success {
 			successCount++
+			// Store first successful response as sample
+			if sampleResponse == "" && res.ResponseBody != "" {
+				sampleResponse = res.ResponseBody
+			}
 		} else {
 			failCount++
 			// Count status codes for failed requests
@@ -179,6 +199,19 @@ func RunBenchMark(url, method, body, contentType string, totalReqs, concurrency 
 			for err, count := range errors {
 				fmt.Printf("  %s: %d requests\n", err, count)
 			}
+		}
+		fmt.Println("")
+	}
+
+	// Show sample response if requested and available
+	if showResponse && sampleResponse != "" {
+		fmt.Println("--- Sample Response ---")
+		// Truncate long responses for readability
+		if len(sampleResponse) > 500 {
+			fmt.Println(sampleResponse[:500] + "...")
+			fmt.Println("(Response truncated - first 500 characters shown)")
+		} else {
+			fmt.Println(sampleResponse)
 		}
 		fmt.Println("")
 	}

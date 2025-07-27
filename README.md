@@ -8,6 +8,7 @@ It lets you send multiple concurrent HTTP requests and get min/max/avg response 
 - Support for different HTTP methods (GET, POST, PUT, DELETE, etc.)
 - Request body support for POST/PUT requests
 - Configurable content types (JSON, form data, etc.)
+- Response body capture and display
 - Detailed error reporting with failure reasons
 - Status code breakdown for failed requests
 - Configurable concurrency levels
@@ -38,6 +39,9 @@ gobench -u https://api.example.com/users/1 -m PUT -d '{"name":"Jane","email":"ja
 
 # DELETE request (no body needed)
 gobench -u https://api.example.com/users/1 -m DELETE -n 20 -c 2
+
+# Show response body in output
+gobench -u https://api.example.com/users -m GET -n 1 -c 1 --show-response
 ```
 
 ## Flags
@@ -46,6 +50,7 @@ gobench -u https://api.example.com/users/1 -m DELETE -n 20 -c 2
 - `-m, --method`: HTTP method to use (default: GET)
 - `-d, --data`: Request body data (for POST/PUT requests)
 - `-H, --header`: Content-Type header (defaults to application/json for POST/PUT with data)
+- `--show-response`: Show response body in output
 - `-n, --requests`: Total number of requests (default: 1)
 - `-c, --concurrency`: Number of concurrent workers (default: 1)
 
@@ -71,6 +76,14 @@ Errors:
   HTTP 400: 400 Bad Request: 2 requests
   HTTP 500: 500 Internal Server Error: 3 requests
 
+--- Sample Response ---
+{
+  "id": 123,
+  "name": "John",
+  "email": "john@example.com",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+
 Min Time : 45.2ms
 Max Time : 1.2s
 Avg Time : 234.5ms
@@ -86,6 +99,15 @@ The tool now provides detailed error information:
 - **Network Errors**: Connection failures, DNS resolution issues, timeouts
 - **Request Errors**: Malformed URLs, invalid request creation
 - **Response Errors**: Server errors, client errors, and their specific messages
+
+### Response Body
+
+When using the `--show-response` flag, the tool will display:
+
+- **Sample Response**: Shows the first successful response body
+- **Truncation**: Long responses (>500 characters) are truncated for readability
+- **Format Preservation**: JSON and other formatted responses are displayed as-is
+- **Error Responses**: Failed requests also capture response bodies for debugging
 
 ## Content Types
 
